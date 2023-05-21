@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <MotorDriver.h>
 #include <WiFiNINA.h>
+#include <WiFiUdp.h>
 
 #include "secrets.h"
 
@@ -26,16 +27,63 @@ volatile int rightEncoderTime = 0;
 char ssid[] = WIFI_SSID;
 char pass[] = WIFI_PASS;
 
+unsigned int localPort = 10000;
+char packetBuffer[256];
+
+IPAddress remoteIp = IPAddress(WIFI_FIRST_OCTET, WIFI_SECOND_OCTET, WIFI_THIRD_OCTET, WIFI_FOURTH_OCTET);
+uint16_t remotePort = 10000;
+
+WiFiUDP Udp;
+
+enum State
+{
+  // Waiting for command
+  WAITING,
+  // Done with command
+  DONE,
+  FOLLOWING_LINE,
+  TURNING_LEFT,
+};
+
+State state = DONE;
+
+enum Command
+{
+  PING,
+  FOLLOW_LINE,
+  TURN_LEFT,
+  TURN_RIGHT,
+  U_TURN,
+};
+
+void sendMessage(char *message)
+{
+  Udp.beginPacket(remoteIp, remotePort);
+  Udp.write(message);
+  Udp.write(",");
+  char buffer[16];
+  ultoa(millis(), buffer, 10);
+  Udp.write(buffer);
+  Udp.endPacket();
+}
+
 void encoderLeft()
 {
-  Serial.println("Left");
   leftEncoderTime = millis();
+
+  if (state > DONE)
+  {
+    sendMessage("left");
+  }
 }
 
 void encoderRight()
 {
-  Serial.println("Right");
   rightEncoderTime = millis();
+  if (state > DONE)
+  {
+    sendMessage("right");
+  }
 }
 
 void setupWiFi()
@@ -45,6 +93,8 @@ void setupWiFi()
   if (status != WL_CONNECTED)
   {
     Serial.print("Attempting to connect to WiFi network");
+
+    Udp.stop();
 
     status = WiFi.begin(ssid, pass);
 
@@ -57,6 +107,8 @@ void setupWiFi()
 
     Serial.print("\nConnected! IP address: ");
     Serial.println(WiFi.localIP());
+
+    Udp.begin(localPort);
   }
 }
 
@@ -107,103 +159,204 @@ void motor(bool left, int command, int power)
   }
 }
 
-void followLine(bool stopBeforeIntersection)
+struct FollowLineState
 {
+  // If true the robot will stop when it sees an intersection
+  bool stopBeforeIntersection = false;
+  // If true the robot has entered an intersection
   bool enteredIntersection = false;
+};
 
-  while (true)
+FollowLineState followLineState = {};
+
+bool state_follow_line()
+{
+  int sensorLeft = analogRead(lineSensorLeft);
+  int sensorRight = analogRead(lineSensorRight);
+
+  bool rightRunning = sensorRight > lineStrength;
+  bool leftRunning = sensorLeft > lineStrength;
+
+  if (rightRunning)
   {
-    int sensorLeft = analogRead(lineSensorLeft);
-    int sensorRight = analogRead(lineSensorRight);
+    // We are on the line or to the right of it
+    motor(false, FORWARD, map(sensorRight, lineStrength, 1024, minSpeed, leftRunning ? maxSpeed : maxSpeedTurn));
+  }
+  else
+  {
+    // We are too much to the left of the line (sensor is in the middle of line)
+    motor(false, RELEASE, 0);
+  }
 
-    bool rightRunning = sensorRight > lineStrength;
-    bool leftRunning = sensorLeft > lineStrength;
+  if (leftRunning)
+  {
+    // We are on the line or to the left of it
+    motor(true, FORWARD, map(sensorLeft, lineStrength, 1024, minSpeed, rightRunning ? maxSpeed : maxSpeedTurn));
+  }
+  else
+  {
+    // We are too much to the right of the line (sensor is in middle of line)
+    motor(true, RELEASE, 0);
+  }
 
-    if (rightRunning)
-    {
-      // We are on the line or to the right of it
-      motor(false, FORWARD, map(sensorRight, lineStrength, 1024, minSpeed, leftRunning ? maxSpeed : maxSpeedTurn));
-    }
-    else
-    {
-      // We are too much to the left of the line (sensor is in the middle of line)
-      motor(false, RELEASE, 0);
-    }
+  if (sensorLeft < lineStrength && sensorRight < lineStrength)
+  {
+    // Both left and right sensors are on the line / entered an intersection
+    followLineState.enteredIntersection = true;
 
-    if (leftRunning)
+    if (followLineState.stopBeforeIntersection)
     {
-      // We are on the line or to the left of it
-      motor(true, FORWARD, map(sensorLeft, lineStrength, 1024, minSpeed, rightRunning ? maxSpeed : maxSpeedTurn));
-    }
-    else
-    {
-      // We are too much to the right of the line (sensor is in middle of line)
-      motor(true, RELEASE, 0);
-    }
-
-    if (sensorLeft < lineStrength && sensorRight < lineStrength)
-    {
-      // Both left and right sensors are on the line / entered an intersection
-      enteredIntersection = true;
-
-      if (stopBeforeIntersection)
-      {
-        break;
-      }
-    }
-
-    if (!stopBeforeIntersection && enteredIntersection && (sensorLeft > notLineStrength || sensorRight > notLineStrength))
-    {
-      // We have left the intersection
-      break;
+      return true;
     }
   }
+
+  if (!followLineState.stopBeforeIntersection && followLineState.enteredIntersection && (sensorLeft > notLineStrength || sensorRight > notLineStrength))
+  {
+    // We have left the intersection
+    return true;
+  }
+
+  return false;
 }
 
-void turnLeft()
+struct TurnLeftState
+{
+  bool armLeftLine = false;
+};
+
+TurnLeftState turnLeftState = {};
+
+bool state_turn_left()
 {
   motor(true, BRAKE, 0);
 
-  bool armLeftLine = false;
-
-  // Perform left turn using right motor
-
-  while (true)
+  if (!turnLeftState.armLeftLine)
   {
+    // Perform left turn using right motor
+
     motor(false, FORWARD, minSpeed);
 
     int sensorArm = analogRead(lineSensorArm);
 
-    if (sensorArm < lineStrength && armLeftLine)
+    if (sensorArm < lineStrength && turnLeftState.armLeftLine)
     {
       // Arm entered line again
-      break;
+      return false;
     }
 
     if (sensorArm > lineStrength * 1.5)
     {
       // Arm left line
-      armLeftLine = true;
+      turnLeftState.armLeftLine = true;
     }
   }
-
-  motor(false, RELEASE, 0);
-
-  // Turn right till left sensor sees the line
-  while (true)
+  else
   {
+    motor(false, RELEASE, 0);
+
+    // Turn right till left sensor sees the line
+
     int sensorLeft = analogRead(lineSensorLeft);
 
     if (sensorLeft < lineStrength)
     {
-      break;
+      return true;
     }
 
     motor(true, FORWARD, maxSpeed);
   }
+
+  return false;
 }
+
+void stopMotors()
+{
+  m.motor(motorLeft, BRAKE, 0);
+  m.motor(motorRight, BRAKE, 0);
+}
+
+unsigned long lastHeartbeat = 0;
 
 void loop()
 {
-  setupWiFi();
+  if (state == DONE)
+  {
+    Serial.println("Waiting for command...");
+
+    // Stop motors before doing anything else
+    stopMotors();
+
+    // Make sure we are connected to WiFi
+    setupWiFi();
+
+    // Tell server we are ready for next command
+    sendMessage("ready");
+
+    state = WAITING;
+  }
+  else if (state == WAITING)
+  {
+    // Make sure we are connected to WiFi
+    setupWiFi();
+
+    unsigned long now = millis();
+
+    if (now - lastHeartbeat > 10000)
+    {
+      sendMessage("ready");
+      lastHeartbeat = now;
+    }
+
+    // if there's data available, read a packet
+    int packetSize = Udp.parsePacket();
+    if (packetSize)
+    {
+      remoteIp = Udp.remoteIP();
+      int len = Udp.read(packetBuffer, 255);
+      if (len > 0)
+      {
+        packetBuffer[len] = 0;
+      }
+
+      int command = atoi(packetBuffer);
+
+      Serial.print("Received command: ");
+      Serial.println(command);
+
+      remotePort = Udp.remotePort();
+
+      sendMessage("received");
+
+      switch (command)
+      {
+      case PING:
+        sendMessage("pong");
+        break;
+      case FOLLOW_LINE:
+        state = FOLLOWING_LINE;
+        break;
+      case TURN_LEFT:
+        state = TURNING_LEFT;
+        break;
+      default:
+        break;
+      }
+    }
+  }
+  else if (state == FOLLOWING_LINE)
+  {
+    if (state_follow_line())
+    {
+      followLineState = {};
+      state = DONE;
+    }
+  }
+  else if (state == TURNING_LEFT)
+  {
+    if (state_turn_left())
+    {
+      turnLeftState = {};
+      state = DONE;
+    }
+  }
 }
