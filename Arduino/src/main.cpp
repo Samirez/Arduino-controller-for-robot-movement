@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <MotorDriver.h>
+#include <WiFiNINA.h>
+
+#include "secrets.h"
 
 MotorDriver m;
 
@@ -20,6 +23,9 @@ const int minSpeed = 80;
 volatile int leftEncoderTime = 0;
 volatile int rightEncoderTime = 0;
 
+char ssid[] = WIFI_SSID;
+char pass[] = WIFI_PASS;
+
 void encoderLeft()
 {
   Serial.println("Left");
@@ -30,6 +36,28 @@ void encoderRight()
 {
   Serial.println("Right");
   rightEncoderTime = millis();
+}
+
+void setupWiFi()
+{
+  int status = WiFi.status();
+
+  if (status != WL_CONNECTED)
+  {
+    Serial.print("Attempting to connect to WiFi network");
+
+    status = WiFi.begin(ssid, pass);
+
+    while (status != WL_CONNECTED)
+    {
+      Serial.print(".");
+      delay(1000);
+      status = WiFi.begin(ssid, pass);
+    }
+
+    Serial.print("\nConnected! IP address: ");
+    Serial.println(WiFi.localIP());
+  }
 }
 
 void setup()
@@ -47,6 +75,8 @@ void setup()
   pinMode(A0, INPUT);
   pinMode(A1, INPUT);
   pinMode(A2, INPUT);
+
+  setupWiFi();
 }
 
 void motor(bool left, int command, int power)
@@ -175,6 +205,5 @@ void turnLeft()
 
 void loop()
 {
-  followLine(true);
-  turnLeft();
+  setupWiFi();
 }
