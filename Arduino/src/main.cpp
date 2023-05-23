@@ -363,7 +363,7 @@ bool state_turn_around()
   int sensorRight = analogRead(lineSensorRight);
   int sensorArm = analogRead(lineSensorArm);
 
-  if (turnAroundState.leftSensorLeftLine && sensorLeft < lineStrength)
+  if (turnAroundState.leftSensorLeftLine && sensorLeft < lineStrength && leftEncoderCount > 10 && rightEncoderCount > 10)
   {
     // Arm left line, left sensor left line, and left sensor entered line
     return true;
