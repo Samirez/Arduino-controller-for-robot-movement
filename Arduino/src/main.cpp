@@ -67,11 +67,12 @@ enum Command
 void sendMessage(char *message)
 {
   Udp.beginPacket(remoteIp, remotePort);
-  Udp.write(message);
-  Udp.write(",");
+
   char buffer[16];
   ultoa(millis(), buffer, 10);
   Udp.write(buffer);
+  Udp.write(",");
+  Udp.write(message);
   Udp.endPacket();
 }
 
