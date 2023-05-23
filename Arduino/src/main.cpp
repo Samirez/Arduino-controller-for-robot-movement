@@ -222,18 +222,18 @@ bool state_follow_line()
 struct TurnLeftState
 {
   bool armLeftLine = false;
+  bool armEnteredLineAgain = false;
 };
 
 TurnLeftState turnLeftState = {};
 
 bool state_turn_left()
 {
-  motor(true, BRAKE, 0);
-
-  if (!turnLeftState.armLeftLine)
+  if (turnLeftState.armEnteredLineAgain == false)
   {
     // Perform left turn using right motor
 
+    motor(true, BRAKE, 0);
     motor(false, FORWARD, minSpeed);
 
     int sensorArm = analogRead(lineSensorArm);
@@ -241,10 +241,9 @@ bool state_turn_left()
     if (sensorArm < lineStrength && turnLeftState.armLeftLine)
     {
       // Arm entered line again
-      return false;
+      turnLeftState.armEnteredLineAgain = true;
     }
-
-    if (sensorArm > lineStrength * 1.5)
+    else if (sensorArm > lineStrength * 1.5)
     {
       // Arm left line
       turnLeftState.armLeftLine = true;
