@@ -291,6 +291,8 @@ void loop()
     // Tell server we are ready for next command
     sendMessage("ready");
 
+    lastHeartbeat = millis();
+
     state = WAITING;
   }
   else if (state == WAITING)
