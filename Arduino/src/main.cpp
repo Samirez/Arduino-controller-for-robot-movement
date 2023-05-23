@@ -161,10 +161,8 @@ void motor(bool left, int command, int power)
 
 struct FollowLineState
 {
-  // If true the robot will stop when it sees an intersection
-  bool stopBeforeIntersection = false;
-  // If true the robot has entered an intersection
-  bool enteredIntersection = false;
+  // If the robot starts in an intersection it needs to exit it to follow the line
+  bool enteredLine = false;
 };
 
 FollowLineState followLineState = {};
@@ -176,6 +174,22 @@ bool state_follow_line()
 
   bool rightRunning = sensorRight > lineStrength;
   bool leftRunning = sensorLeft > lineStrength;
+
+  if (!followLineState.enteredLine)
+  {
+    // We have never entered the line, check if we are on an intersection
+    if (rightRunning || leftRunning)
+    {
+      // We are not on an intersection = we assume we are on the line
+      followLineState.enteredLine = true;
+    }
+    else
+    {
+      // We are in an intersection, start both motors to exit intersection
+      leftRunning = true;
+      rightRunning = true;
+    }
+  }
 
   if (rightRunning)
   {
@@ -199,20 +213,9 @@ bool state_follow_line()
     motor(true, RELEASE, 0);
   }
 
-  if (sensorLeft < lineStrength && sensorRight < lineStrength)
+  if (followLineState.enteredLine && sensorLeft < lineStrength && sensorRight < lineStrength)
   {
     // Both left and right sensors are on the line / entered an intersection
-    followLineState.enteredIntersection = true;
-
-    if (followLineState.stopBeforeIntersection)
-    {
-      return true;
-    }
-  }
-
-  if (!followLineState.stopBeforeIntersection && followLineState.enteredIntersection && (sensorLeft > notLineStrength || sensorRight > notLineStrength))
-  {
-    // We have left the intersection
     return true;
   }
 
