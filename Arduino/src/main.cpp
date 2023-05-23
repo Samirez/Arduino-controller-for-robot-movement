@@ -44,6 +44,7 @@ enum State
   FOLLOWING_LINE,
   TURNING_LEFT,
   TURNING_RIGHT,
+  TURNING_AROUND,
 };
 
 State state = DONE;
@@ -54,7 +55,7 @@ enum Command
   FOLLOW_LINE,
   TURN_LEFT,
   TURN_RIGHT,
-  U_TURN,
+  TURN_AROUND,
 };
 
 void sendMessage(char *message)
@@ -316,6 +317,42 @@ bool state_turn_right()
   return false;
 }
 
+struct TurnAroundState
+{
+  bool armLeftLine = false;
+  bool leftSensorLeftLine = false;
+};
+
+TurnAroundState turnAroundState = {};
+
+bool state_turn_around()
+{
+  motor(true, FORWARD, minSpeed);
+  motor(false, BACKWARD, minSpeed);
+
+  int sensorLeft = analogRead(lineSensorLeft);
+  int sensorRight = analogRead(lineSensorRight);
+  int sensorArm = analogRead(lineSensorArm);
+
+  if (turnAroundState.leftSensorLeftLine && sensorLeft < lineStrength)
+  {
+    // Arm left line, left sensor left line, and left sensor entered line
+    return true;
+  }
+  else if (turnAroundState.armLeftLine && sensorLeft > notLineStrength)
+  {
+    // Arm left line and left sensor left line
+    turnAroundState.leftSensorLeftLine = true;
+  }
+  else if (sensorArm > notLineStrength)
+  {
+    // Arm left line
+    turnAroundState.armLeftLine = true;
+  }
+
+  return false;
+}
+
 void stopMotors()
 {
   m.motor(motorLeft, BRAKE, 0);
@@ -390,6 +427,9 @@ void loop()
       case TURN_RIGHT:
         state = TURNING_RIGHT;
         break;
+      case TURN_AROUND:
+        state = TURNING_AROUND;
+        break;
       default:
         break;
       }
@@ -416,6 +456,14 @@ void loop()
     if (state_turn_right())
     {
       turnRightState = {};
+      state = DONE;
+    }
+  }
+  else if (state == TURNING_AROUND)
+  {
+    if (state_turn_around())
+    {
+      turnAroundState = {};
       state = DONE;
     }
   }
