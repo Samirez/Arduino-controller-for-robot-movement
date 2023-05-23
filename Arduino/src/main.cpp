@@ -22,7 +22,9 @@ const int maxSpeed = 160;
 const int minSpeed = 80;
 
 volatile int leftEncoderTime = 0;
+volatile int leftEncoderCount = 0;
 volatile int rightEncoderTime = 0;
+volatile int rightEncoderCount = 0;
 
 char ssid[] = WIFI_SSID;
 char pass[] = WIFI_PASS;
@@ -75,6 +77,7 @@ void encoderLeft()
 
   if (state > DONE)
   {
+    leftEncoderCount++;
     sendMessage("left");
   }
 }
@@ -84,6 +87,7 @@ void encoderRight()
   rightEncoderTime = millis();
   if (state > DONE)
   {
+    rightEncoderCount++;
     sendMessage("right");
   }
 }
@@ -321,14 +325,24 @@ struct TurnAroundState
 {
   bool armLeftLine = false;
   bool leftSensorLeftLine = false;
+  bool resetEncoderCount = false;
 };
 
 TurnAroundState turnAroundState = {};
 
 bool state_turn_around()
 {
-  motor(true, FORWARD, minSpeed);
-  motor(false, BACKWARD, minSpeed);
+  if (!turnAroundState.resetEncoderCount)
+  {
+    leftEncoderCount = 0;
+    rightEncoderCount = 0;
+    turnAroundState.resetEncoderCount = true;
+  }
+
+  int difference = leftEncoderCount - rightEncoderCount;
+
+  motor(true, difference > 5 ? RELEASE : FORWARD, minSpeed);
+  motor(false, difference < 5 ? RELEASE : BACKWARD, minSpeed);
 
   int sensorLeft = analogRead(lineSensorLeft);
   int sensorRight = analogRead(lineSensorRight);
