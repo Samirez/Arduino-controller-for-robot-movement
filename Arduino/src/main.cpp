@@ -23,6 +23,7 @@ const int notLineStrength = 500;
 const int maxSpeedTurn = 200;
 const int maxSpeed = 160;
 const int minSpeed = 80;
+const int motorStallDelay = 100;
 
 volatile int leftEncoderTime = 0;
 volatile int leftEncoderCount = 0;
@@ -150,7 +151,7 @@ void motor(bool left, int command, int power)
 
   if (left)
   {
-    if (now - leftEncoderTime > 100)
+    if (now - leftEncoderTime > motorStallDelay)
     {
       m.motor(motorLeft, command, maxSpeedTurn);
     }
@@ -163,7 +164,7 @@ void motor(bool left, int command, int power)
   }
   else
   {
-    if (now - rightEncoderTime > 100)
+    if (now - rightEncoderTime > motorStallDelay)
     {
       m.motor(motorRight, command, maxSpeedTurn);
     }
