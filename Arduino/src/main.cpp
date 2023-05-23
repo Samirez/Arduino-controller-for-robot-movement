@@ -10,6 +10,9 @@ MotorDriver m;
 const int motorRight = 3;
 const int motorLeft = 4;
 
+int leftMotorCommand = RELEASE;
+int rightMotorCommand = RELEASE;
+
 const int lineSensorRight = A0;
 const int lineSensorLeft = A1;
 const int lineSensorArm = A2;
@@ -75,20 +78,24 @@ void encoderLeft()
 {
   leftEncoderTime = millis();
 
-  if (state > DONE)
+  if (state > DONE && (leftMotorCommand == FORWARD || leftMotorCommand == BACKWARD))
   {
     leftEncoderCount++;
-    sendMessage("left");
+    char message[20];
+    sprintf(message, "left,%s", (leftMotorCommand == FORWARD) ? "forward" : "backward");
+    sendMessage(message);
   }
 }
 
 void encoderRight()
 {
   rightEncoderTime = millis();
-  if (state > DONE)
+  if (state > DONE && (rightMotorCommand == FORWARD || rightMotorCommand == BACKWARD))
   {
     rightEncoderCount++;
-    sendMessage("right");
+    char message[20];
+    sprintf(message, "right,%s", (rightMotorCommand == FORWARD) ? "forward" : "backward");
+    sendMessage(message);
   }
 }
 
@@ -151,6 +158,8 @@ void motor(bool left, int command, int power)
     {
       m.motor(motorLeft, command, power);
     }
+
+    leftMotorCommand = command;
   }
   else
   {
@@ -162,6 +171,8 @@ void motor(bool left, int command, int power)
     {
       m.motor(motorRight, command, power);
     }
+
+    rightMotorCommand = command;
   }
 }
 
