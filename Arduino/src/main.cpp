@@ -353,8 +353,11 @@ bool state_turn_around()
 
   int difference = leftEncoderCount - rightEncoderCount;
 
-  motor(true, difference > 5 ? RELEASE : FORWARD, minSpeed);
-  motor(false, difference < 5 ? RELEASE : BACKWARD, minSpeed);
+  bool leftRunning = difference < 5;
+  bool rightRunning = difference > -5;
+
+  motor(true, leftRunning ? FORWARD : RELEASE, map(difference, 0, 5, minSpeed, maxSpeed));
+  motor(false, rightRunning ? BACKWARD : RELEASE, map(difference, 0, -5, minSpeed, maxSpeed));
 
   int sensorLeft = analogRead(lineSensorLeft);
   int sensorRight = analogRead(lineSensorRight);
