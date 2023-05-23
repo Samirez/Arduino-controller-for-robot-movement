@@ -1,6 +1,7 @@
 const dgram = require('node:dgram');
 const socket = dgram.createSocket('udp4');
 const readline = require('node:readline');
+const fs = require('node:fs');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -15,13 +16,7 @@ socket.on('error', (err) => {
 socket.on('message', (msg, rinfo) => {
   console.log(`server got: \"${msg}\" from ${rinfo.address}:${rinfo.port}`);
 
-  if (msg.toString().startsWith('ready')) {
-    socket.send('0', rinfo.port, rinfo.address, (err) => {
-      if (err) {
-        console.log(err);
-      }
-    });
-  }
+  fs.appendFileSync('logs.txt', "received," + Date.now() + ',' + msg.toString() + '\n');
 });
 
 socket.on('listening', () => {
@@ -35,6 +30,8 @@ rl.on('line', (input) => {
   socket.send(input, 10000, '192.168.50.221', (err) => {
     if (err) {
       console.log(err);
+    } else {
+      fs.appendFileSync('logs.txt', "sent," + Date.now() + ',' + input + '\n');
     }
   });
 });
