@@ -1,0 +1,7 @@
+#define WIFI_SSID ""
+#define WIFI_PASS ""
+
+#define WIFI_FIRST_OCTET 127
+#define WIFI_SECOND_OCTET 0
+#define WIFI_THIRD_OCTET 0
+#define WIFI_FOURTH_OCTET 1
