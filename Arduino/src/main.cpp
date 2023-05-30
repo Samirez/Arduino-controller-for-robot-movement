@@ -2,10 +2,13 @@
 #include <MotorDriver.h>
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
+#include <Queue.h>
 
 #include "secrets.h"
 
 MotorDriver m;
+
+Queue<char *> queue(256);
 
 const int motorRight = 3;
 const int motorLeft = 4;
@@ -21,8 +24,8 @@ const int lineStrength = 300;
 const int notLineStrength = 500;
 
 const int maxSpeedTurn = 200;
-const int maxSpeed = 160;
-const int minSpeed = 80;
+const int maxSpeed = 140;
+const int minSpeed = 60;
 const int motorStallDelay = 100;
 
 volatile int leftEncoderTime = 0;
@@ -64,23 +67,39 @@ enum Command
   TURN_AROUND,
 };
 
-void sendMessage(char *message)
+void sendMessage(char *message, bool flush = false)
 {
-  Udp.beginPacket(remoteIp, remotePort);
+  char buffer[20];
+  sprintf(buffer, "%ld,%s", millis(), message);
 
-  char buffer[16];
-  ultoa(millis(), buffer, 10);
-  Udp.write(buffer);
-  Udp.write(",");
-  Udp.write(message);
-  Udp.endPacket();
+  queue.push(strdup(buffer)); // Make a copy of the buffer
+
+  int count = queue.count();
+
+  if (count >= 50 || flush)
+  {
+    Udp.beginPacket(remoteIp, remotePort);
+    for (int i = 0; i < count; i++)
+    {
+      char *queuedMessage = queue.pop();
+      Udp.write(queuedMessage);
+
+      if (i < count - 1)
+      {
+        Udp.write(";");
+      }
+
+      free(queuedMessage); // Free the memory allocated by strdup
+    }
+    Udp.endPacket();
+  }
 }
 
 void encoderLeft()
 {
   leftEncoderTime = millis();
 
-  if (state > DONE && (leftMotorCommand == FORWARD || leftMotorCommand == BACKWARD))
+  if (state > WAITING && (leftMotorCommand == FORWARD || leftMotorCommand == BACKWARD))
   {
     leftEncoderCount++;
     char message[20];
@@ -404,7 +423,7 @@ void loop()
     setupWiFi();
 
     // Tell server we are ready for next command
-    sendMessage("ready");
+    sendMessage("ready", true);
 
     lastHeartbeat = millis();
 
@@ -419,7 +438,7 @@ void loop()
 
     if (now - lastHeartbeat > 10000)
     {
-      sendMessage("ready");
+      sendMessage("ready", true);
       lastHeartbeat = now;
     }
 
