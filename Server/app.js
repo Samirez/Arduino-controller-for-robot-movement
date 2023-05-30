@@ -16,7 +16,16 @@ socket.on('error', (err) => {
 socket.on('message', (msg, rinfo) => {
   console.log(`server got: \"${msg}\" from ${rinfo.address}:${rinfo.port}`);
 
-  fs.appendFileSync('logs.txt', "received," + Date.now() + ',' + msg.toString() + '\n');
+  const data = msg.toString().split(';');
+  const now = Date.now();
+  
+  let append = '';
+
+  for (let i = 0; i < data.length; i++) {
+    append += "received," + now + ',' + data[i] + '\n';
+  }
+
+  fs.appendFileSync('logs.txt', append);
 });
 
 socket.on('listening', () => {
@@ -27,7 +36,7 @@ socket.on('listening', () => {
 socket.bind(10000);
 
 rl.on('line', (input) => {
-  socket.send(input, 10000, '192.168.50.221', (err) => {
+  socket.send(input, 10000, '172.20.10.3', (err) => {
     if (err) {
       console.log(err);
     } else {
